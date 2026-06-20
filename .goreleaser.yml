@@ -8,6 +8,8 @@ builds:
     binary: firecrawl
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/alexgorbatchev/firecrawl-cli/cmd.Version={{.Version}}
     goos:
       - darwin
       - linux

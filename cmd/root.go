@@ -16,6 +16,9 @@ var (
 	timeout    time.Duration
 	jsonOutput bool
 
+	// Version represents the CLI version, injected at build time by GoReleaser.
+	Version = "dev"
+
 	// clientFactory defines how we create the Firecrawl client.
 	// We make it a variable so we can mock it in tests.
 	createClient = func(apiKey, apiURL string, timeout time.Duration) (FirecrawlClient, error) {
@@ -26,6 +29,7 @@ var (
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:           "firecrawl [URL]",
+	Version:       Version,
 	Short:         "A utility for web scraping, mapping, searching, and AI-agent browser tasks.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
