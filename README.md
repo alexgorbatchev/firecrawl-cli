@@ -1,6 +1,8 @@
 # firecrawl
 
-`firecrawl` is a Go-based command-line interface for the Firecrawl API. It enables you to scrape individual web pages, map website structures, search the web, and run autonomous, LLM-powered browser extraction agents directly from your terminal.
+`firecrawl` is a command-line interface for the [Firecrawl](https://www.firecrawl.dev) API. It is a thin wrapper built on top of the official SDK that provides limited command-line functionality (enabling you to scrape individual web pages, map website structures, search the web, and run browser extraction agents directly from your terminal). 
+
+Contributions and PRs are welcome to expand coverage of other SDK and API features!
 
 ---
 
