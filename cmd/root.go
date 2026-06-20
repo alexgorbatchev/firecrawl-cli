@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -24,7 +25,7 @@ var (
 
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
-	Use:           "firecrawl",
+	Use:           "firecrawl [URL]",
 	Short:         "A utility for web scraping, mapping, searching, and AI-agent browser tasks.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -32,6 +33,15 @@ var RootCmd = &cobra.Command{
 It maps URLs, scrapes single pages, searches the web, and runs AI-powered agent extraction tasks.
 
 You can customize the Firecrawl API URL with --api-url.`,
+	Args: cobra.ArbitraryArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// If 1 argument starting with http:// or https://, route to scrape command
+		if len(args) == 1 && (strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://")) {
+			return scrapeCmd.RunE(cmd, args)
+		}
+		// Otherwise print help
+		return cmd.Help()
+	},
 }
 
 func init() {
@@ -44,6 +54,9 @@ func init() {
 
 	// Define a custom help flag to avoid Cobra's default short -h flag, ensuring only double-dash flags exist.
 	RootCmd.PersistentFlags().Bool("help", false, "help for firecrawl")
+
+	// Register local scrape flags on the root command so they are accepted when running direct URL scrapes
+	registerScrapeFlags(RootCmd.Flags())
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

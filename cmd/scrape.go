@@ -4,14 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	firecrawl "github.com/firecrawl/firecrawl/apps/go-sdk"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
 	// Local scrape flag variables
-	scrapeFormats             []string
+	scrapeFormat              []string
+	scrapeHtml                bool
 	scrapeOnlyMainContent     bool
 	scrapeIncludeTags         []string
 	scrapeExcludeTags         []string
@@ -28,7 +31,15 @@ var (
 	scrapeLocationCountry     string
 	scrapeLocationLanguages   []string
 	scrapeJsonPrompt          string
-	scrapeJsonSchema          string
+	scrapeSchema              string
+	scrapeSchemaFile          string
+	scrapeActions             string
+	scrapeActionsFile         string
+	scrapeScreenshot          bool
+	scrapeFullPageScreenshot  bool
+	scrapeOutput              string
+	scrapePretty              bool
+	scrapeTiming              bool
 )
 
 var scrapeCmd = &cobra.Command{
@@ -46,13 +57,20 @@ var scrapeCmd = &cobra.Command{
 
 		opts := &firecrawl.ScrapeOptions{}
 
-		// Map flag changes to ScrapeOptions pointers dynamically
-		if cmd.Flags().Changed("formats") {
-			opts.Formats = scrapeFormats
+		// Map formats
+		formats := []string{}
+		if cmd.Flags().Changed("format") {
+			formats = scrapeFormat
+		} else if scrapeHtml {
+			formats = []string{"html"}
 		} else {
-			// Default to markdown if not specified
-			opts.Formats = []string{"markdown"}
+			formats = []string{"markdown"}
 		}
+
+		if scrapeScreenshot && !contains(formats, "screenshot") {
+			formats = append(formats, "screenshot")
+		}
+		opts.Formats = formats
 
 		if cmd.Flags().Changed("only-main-content") {
 			opts.OnlyMainContent = firecrawl.Bool(scrapeOnlyMainContent)
@@ -105,28 +123,56 @@ var scrapeCmd = &cobra.Command{
 			}
 		}
 
-		// Handle structured extraction JSON Options
-		if scrapeJsonPrompt != "" || scrapeJsonSchema != "" {
+		// Handle actions
+		if scrapeActions != "" || scrapeActionsFile != "" {
+			var actionsList []map[string]interface{}
+			var actionsBytes []byte
+			var fileErr error
+
+			if scrapeActionsFile != "" {
+				actionsBytes, fileErr = os.ReadFile(scrapeActionsFile)
+				if fileErr != nil {
+					return fmt.Errorf("reading actions file: %w", fileErr)
+				}
+			} else {
+				actionsBytes = []byte(scrapeActions)
+			}
+
+			if err := json.Unmarshal(actionsBytes, &actionsList); err != nil {
+				return fmt.Errorf("parsing actions JSON: %w", err)
+			}
+			opts.Actions = actionsList
+		}
+
+		// Handle schema for structured JSON Options
+		if scrapeJsonPrompt != "" || scrapeSchema != "" || scrapeSchemaFile != "" {
 			opts.JsonOptions = &firecrawl.JsonOptions{}
 			if scrapeJsonPrompt != "" {
 				opts.JsonOptions.Prompt = scrapeJsonPrompt
 			}
-			if scrapeJsonSchema != "" {
+			if scrapeSchema != "" || scrapeSchemaFile != "" {
 				var schemaMap map[string]interface{}
-				// Try parsing as raw JSON string first
-				if err := json.Unmarshal([]byte(scrapeJsonSchema), &schemaMap); err != nil {
-					// If parsing fails, try reading as a file path
-					fileBytes, fileErr := os.ReadFile(scrapeJsonSchema)
-					if fileErr != nil {
-						return fmt.Errorf("json-schema is neither valid JSON nor a readable file path: %w (json parse err: %v)", fileErr, err)
+				var schemaBytes []byte
+				var schemaErr error
+
+				if scrapeSchemaFile != "" {
+					schemaBytes, schemaErr = os.ReadFile(scrapeSchemaFile)
+					if schemaErr != nil {
+						return fmt.Errorf("reading schema file: %w", schemaErr)
 					}
-					if err := json.Unmarshal(fileBytes, &schemaMap); err != nil {
-						return fmt.Errorf("parsing JSON schema from file: %w", err)
-					}
+				} else {
+					schemaBytes = []byte(scrapeSchema)
+				}
+
+				if err := json.Unmarshal(schemaBytes, &schemaMap); err != nil {
+					return fmt.Errorf("parsing schema JSON: %w", err)
 				}
 				opts.JsonOptions.Schema = schemaMap
 			}
 		}
+
+		// Track timing if requested
+		startTime := time.Now()
 
 		// Run the scrape operation
 		doc, err := client.Scrape(cmd.Context(), url, opts)
@@ -134,64 +180,114 @@ var scrapeCmd = &cobra.Command{
 			return fmt.Errorf("scraping failed: %w", err)
 		}
 
+		duration := time.Since(startTime)
+
 		// Format and output the result
-		if jsonOutput {
-			bz, err := json.MarshalIndent(doc, "", "  ")
-			if err != nil {
-				return fmt.Errorf("marshaling document: %w", err)
+		var outputStr string
+
+		if jsonOutput || len(formats) > 1 {
+			var bz []byte
+			var mErr error
+			if scrapePretty || jsonOutput {
+				bz, mErr = json.MarshalIndent(doc, "", "  ")
+			} else {
+				bz, mErr = json.Marshal(doc)
 			}
-			cmd.Println(string(bz))
-			return nil
+			if mErr != nil {
+				return fmt.Errorf("marshaling document: %w", mErr)
+			}
+			outputStr = string(bz)
+		} else {
+			// Single format output
+			if doc.Markdown != "" {
+				outputStr = doc.Markdown
+			} else if doc.JSON != nil {
+				bz, err := json.MarshalIndent(doc.JSON, "", "  ")
+				if err == nil {
+					outputStr = string(bz)
+				} else {
+					outputStr = fmt.Sprintf("%+v", doc.JSON)
+				}
+			} else if doc.HTML != "" {
+				outputStr = doc.HTML
+			} else if doc.RawHTML != "" {
+				outputStr = doc.RawHTML
+			} else {
+				// Fallback: dump metadata
+				bz, err := json.MarshalIndent(doc.Metadata, "", "  ")
+				if err == nil {
+					outputStr = string(bz)
+				} else {
+					outputStr = "Scraped successfully, but no markdown or HTML content was returned."
+				}
+			}
 		}
 
-		// Human-friendly output (prefer markdown, then JSON/Html/Text)
-		if doc.Markdown != "" {
-			cmd.Println(doc.Markdown)
-		} else if doc.JSON != nil {
-			bz, err := json.MarshalIndent(doc.JSON, "", "  ")
-			if err == nil {
-				cmd.Println(string(bz))
+		// If timing requested, append to output or stderr
+		if scrapeTiming {
+			timingInfo := fmt.Sprintf("\n--- Request Timing ---\nDuration: %v\n", duration)
+			if scrapeOutput != "" {
+				cmd.PrintErr(timingInfo)
 			} else {
-				cmd.Printf("%+v\n", doc.JSON)
+				outputStr += timingInfo
 			}
-		} else if doc.HTML != "" {
-			cmd.Println(doc.HTML)
-		} else if doc.RawHTML != "" {
-			cmd.Println(doc.RawHTML)
+		}
+
+		// Save to file or write to stdout
+		if scrapeOutput != "" {
+			err := os.WriteFile(scrapeOutput, []byte(outputStr), 0644)
+			if err != nil {
+				return fmt.Errorf("writing output to file: %w", err)
+			}
 		} else {
-			// Fallback: dump metadata
-			bz, err := json.MarshalIndent(doc.Metadata, "", "  ")
-			if err == nil {
-				cmd.Println(string(bz))
-			} else {
-				cmd.Println("Scraped successfully, but no markdown or HTML content was returned.")
-			}
+			cmd.Println(outputStr)
 		}
 
 		return nil
 	},
 }
 
-func init() {
-	// Register flags for scrape command - NO shorthand single-character flags (only double-dash)
-	scrapeCmd.Flags().StringSliceVar(&scrapeFormats, "formats", []string{"markdown"}, "Formats to return (e.g. markdown, html, rawHtml, screenshot, links, video, product, json)")
-	scrapeCmd.Flags().BoolVar(&scrapeOnlyMainContent, "only-main-content", true, "Only return main content of the page")
-	scrapeCmd.Flags().StringSliceVar(&scrapeIncludeTags, "include-tags", nil, "Comma-separated HTML tags to include")
-	scrapeCmd.Flags().StringSliceVar(&scrapeExcludeTags, "exclude-tags", nil, "Comma-separated HTML tags to exclude")
-	scrapeCmd.Flags().IntVar(&scrapeWaitFor, "wait-for", 0, "Wait time in milliseconds before scraping")
-	scrapeCmd.Flags().BoolVar(&scrapeMobile, "mobile", false, "Enable mobile user-agent scraping")
-	scrapeCmd.Flags().BoolVar(&scrapeSkipTLSVerification, "skip-tls-verification", false, "Skip TLS certificate verification")
-	scrapeCmd.Flags().BoolVar(&scrapeRemoveBase64Images, "remove-base64-images", false, "Remove base64-encoded images from the output")
-	scrapeCmd.Flags().BoolVar(&scrapeBlockAds, "block-ads", false, "Block advertisement elements")
-	scrapeCmd.Flags().StringVar(&scrapeProxy, "proxy", "", "Proxy server URL (e.g., http://proxy.example.com:8080)")
-	scrapeCmd.Flags().Int64Var(&scrapeMaxAge, "max-age", 0, "Maximum cache age in seconds")
-	scrapeCmd.Flags().BoolVar(&scrapeStoreInCache, "store-in-cache", false, "Store scraped content in cache")
-	scrapeCmd.Flags().BoolVar(&scrapeLockdown, "lockdown", false, "Enable strict lockdown mode")
-	scrapeCmd.Flags().BoolVar(&scrapeRedactPII, "redact-pii", false, "Redact personally identifiable information")
-	scrapeCmd.Flags().StringVar(&scrapeLocationCountry, "location-country", "", "ISO country code for geotargeting (e.g. US, DE)")
-	scrapeCmd.Flags().StringSliceVar(&scrapeLocationLanguages, "location-languages", nil, "Languages to request for geotargeting (e.g. en, fr)")
-	scrapeCmd.Flags().StringVar(&scrapeJsonPrompt, "json-prompt", "", "Prompt for structural JSON extraction")
-	scrapeCmd.Flags().StringVar(&scrapeJsonSchema, "json-schema", "", "Raw JSON schema string or path to a JSON schema file")
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
+}
 
+func registerScrapeFlags(f *pflag.FlagSet) {
+	// Register flags for scrape - NO shorthand single-character flags (only double-dash)
+	f.StringSliceVar(&scrapeFormat, "format", []string{"markdown"}, "Output formats (comma-separated): markdown, html, rawHtml, links, screenshot, json, images, summary, changeTracking, attributes, branding")
+	f.BoolVar(&scrapeHtml, "html", false, "Shortcut for --format html")
+	f.BoolVar(&scrapeOnlyMainContent, "only-main-content", true, "Extract only main content")
+	f.StringSliceVar(&scrapeIncludeTags, "include-tags", nil, "HTML tags to include (comma-separated)")
+	f.StringSliceVar(&scrapeExcludeTags, "exclude-tags", nil, "HTML tags to exclude (comma-separated)")
+	f.IntVar(&scrapeWaitFor, "wait-for", 0, "Wait time in milliseconds for JS rendering")
+	f.BoolVar(&scrapeMobile, "mobile", false, "Enable mobile user-agent scraping")
+	f.BoolVar(&scrapeSkipTLSVerification, "skip-tls-verification", false, "Skip TLS certificate verification")
+	f.BoolVar(&scrapeRemoveBase64Images, "remove-base64-images", false, "Remove base64-encoded images from the output")
+	f.BoolVar(&scrapeBlockAds, "block-ads", false, "Block advertisement elements")
+	f.StringVar(&scrapeProxy, "proxy", "", "Proxy mode for scraping (e.g., auto or basic)")
+	f.Int64Var(&scrapeMaxAge, "max-age", 0, "Maximum cache age in seconds")
+	f.BoolVar(&scrapeStoreInCache, "store-in-cache", false, "Store scraped content in cache")
+	f.BoolVar(&scrapeLockdown, "lockdown", false, "Enable strict lockdown mode")
+	f.BoolVar(&scrapeRedactPII, "redact-pii", false, "Redact personally identifiable information")
+	f.StringVar(&scrapeLocationCountry, "location-country", "", "ISO country code for geotargeting (e.g. US, DE)")
+	f.StringSliceVar(&scrapeLocationLanguages, "location-languages", nil, "Languages to request for geotargeting (e.g. en, fr)")
+	f.StringVar(&scrapeJsonPrompt, "json-prompt", "", "Prompt for structural JSON extraction")
+	f.StringVar(&scrapeSchema, "schema", "", "JSON schema for structured extraction (inline JSON string)")
+	f.StringVar(&scrapeSchemaFile, "schema-file", "", "Path to JSON schema file")
+	f.StringVar(&scrapeActions, "actions", "", "JSON actions array to run during scrape (inline JSON)")
+	f.StringVar(&scrapeActionsFile, "actions-file", "", "Path to JSON actions file")
+	f.BoolVar(&scrapeScreenshot, "screenshot", false, "Take a screenshot")
+	f.BoolVar(&scrapeFullPageScreenshot, "full-page-screenshot", false, "Take a full page screenshot")
+	f.StringVar(&scrapeOutput, "output", "", "Save output to file")
+	f.BoolVar(&scrapePretty, "pretty", false, "Pretty print JSON output")
+	f.BoolVar(&scrapeTiming, "timing", false, "Show request timing and other useful information")
+}
+
+func init() {
+	registerScrapeFlags(scrapeCmd.Flags())
 	RootCmd.AddCommand(scrapeCmd)
 }

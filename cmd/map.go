@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	firecrawl "github.com/firecrawl/firecrawl/apps/go-sdk"
 	"github.com/spf13/cobra"
@@ -18,11 +19,15 @@ var (
 	mapLocationCountry       string
 	mapLocationLanguages     []string
 	mapDetailed              bool
+	mapWait                  bool
+	mapTimeout               int
+	mapOutput                string
+	mapPretty                bool
 )
 
 var mapCmd = &cobra.Command{
 	Use:   "map [URL]",
-	Short: "Discover URLs on a website",
+	Short: "Discover all URLs on a website quickly",
 	Long:  `Discover and map URLs on a website starting from a given root URL using the Firecrawl API.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -50,6 +55,9 @@ var mapCmd = &cobra.Command{
 		if cmd.Flags().Changed("limit") {
 			opts.Limit = firecrawl.Int(mapLimit)
 		}
+		if cmd.Flags().Changed("timeout") {
+			opts.Timeout = firecrawl.Int(mapTimeout)
+		}
 
 		// Geolocation targeting configuration
 		if mapLocationCountry != "" || len(mapLocationLanguages) > 0 {
@@ -68,35 +76,56 @@ var mapCmd = &cobra.Command{
 			return fmt.Errorf("mapping failed: %w", err)
 		}
 
-		// Output result
+		var outputStr string
+
+		// Output result format
 		if jsonOutput {
-			bz, err := json.MarshalIndent(mapData, "", "  ")
-			if err != nil {
-				return fmt.Errorf("marshaling map data: %w", err)
-			}
-			cmd.Println(string(bz))
-			return nil
-		}
-
-		if len(mapData.Links) == 0 {
-			cmd.Println("No URLs discovered.")
-			return nil
-		}
-
-		for _, link := range mapData.Links {
-			if mapDetailed {
-				titleStr := ""
-				descStr := ""
-				if link.Title != "" {
-					titleStr = fmt.Sprintf(" (Title: %s)", link.Title)
-				}
-				if link.Description != "" {
-					descStr = fmt.Sprintf(" - %s", link.Description)
-				}
-				cmd.Printf("%s%s%s\n", link.URL, titleStr, descStr)
+			var bz []byte
+			var mErr error
+			if mapPretty {
+				bz, mErr = json.MarshalIndent(mapData, "", "  ")
 			} else {
-				cmd.Println(link.URL)
+				bz, mErr = json.Marshal(mapData)
 			}
+			if mErr != nil {
+				return fmt.Errorf("marshaling map data: %w", mErr)
+			}
+			outputStr = string(bz)
+		} else {
+			if len(mapData.Links) == 0 {
+				outputStr = "No URLs discovered."
+			} else {
+				for i, link := range mapData.Links {
+					line := ""
+					if mapDetailed {
+						titleStr := ""
+						descStr := ""
+						if link.Title != "" {
+							titleStr = fmt.Sprintf(" (Title: %s)", link.Title)
+						}
+						if link.Description != "" {
+							descStr = fmt.Sprintf(" - %s", link.Description)
+						}
+						line = fmt.Sprintf("%s%s%s", link.URL, titleStr, descStr)
+					} else {
+						line = link.URL
+					}
+					if i > 0 {
+						outputStr += "\n"
+					}
+					outputStr += line
+				}
+			}
+		}
+
+		// Write output to file if requested, otherwise print to stdout
+		if mapOutput != "" {
+			err := os.WriteFile(mapOutput, []byte(outputStr), 0644)
+			if err != nil {
+				return fmt.Errorf("writing output to file: %w", err)
+			}
+		} else {
+			cmd.Println(outputStr)
 		}
 
 		return nil
@@ -105,14 +134,18 @@ var mapCmd = &cobra.Command{
 
 func init() {
 	// Register flags for map command - NO shorthand single-character flags (only double-dash)
-	mapCmd.Flags().StringVar(&mapSearch, "search", "", "Search query to filter discovered URLs")
-	mapCmd.Flags().StringVar(&mapSitemap, "sitemap", "", "Custom sitemap XML URL to use for discovery")
-	mapCmd.Flags().BoolVar(&mapIncludeSubdomains, "include-subdomains", false, "Include subdomains of the main URL")
-	mapCmd.Flags().BoolVar(&mapIgnoreQueryParameters, "ignore-query-parameters", false, "Ignore query parameters in discovered URLs")
-	mapCmd.Flags().IntVar(&mapLimit, "limit", 100, "Maximum number of links to return")
+	mapCmd.Flags().StringVar(&mapSearch, "search", "", "Filter URLs by search query")
+	mapCmd.Flags().StringVar(&mapSitemap, "sitemap", "", "Sitemap handling: include, skip, only, or custom sitemap URL")
+	mapCmd.Flags().BoolVar(&mapIncludeSubdomains, "include-subdomains", false, "Include subdomains in mapped URLs")
+	mapCmd.Flags().BoolVar(&mapIgnoreQueryParameters, "ignore-query-parameters", false, "Treat URLs with different params as same")
+	mapCmd.Flags().IntVar(&mapLimit, "limit", 100, "Maximum URLs to discover")
 	mapCmd.Flags().StringVar(&mapLocationCountry, "location-country", "", "ISO country code for geotargeting (e.g. US, DE)")
 	mapCmd.Flags().StringSliceVar(&mapLocationLanguages, "location-languages", nil, "Languages to request for geotargeting (e.g. en, fr)")
 	mapCmd.Flags().BoolVar(&mapDetailed, "detailed", false, "Show details like title and description for discovered links")
+	mapCmd.Flags().BoolVar(&mapWait, "wait", false, "Wait for map to complete")
+	mapCmd.Flags().IntVar(&mapTimeout, "timeout", 0, "Timeout in seconds")
+	mapCmd.Flags().StringVar(&mapOutput, "output", "", "Save output to file")
+	mapCmd.Flags().BoolVar(&mapPretty, "pretty", false, "Pretty print JSON output")
 
 	RootCmd.AddCommand(mapCmd)
 }

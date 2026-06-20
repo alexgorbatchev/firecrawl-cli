@@ -51,30 +51,34 @@ The following flags are persistent across the root command and all subcommands. 
 
 ### 1. `scrape`
 
-Scrapes a single page and gets its parsed content.
+Scrapes a single page and gets its parsed content. You can run it explicitly using `firecrawl scrape` or use the direct URL positional shortcut.
 
 ```bash
-# Basic scrape (returns markdown content by default)
+# Direct URL Shortcut (defaults to markdown output)
+firecrawl https://example.com
+
+# Explicit scrape command
 firecrawl scrape https://example.com
 
-# Scrape and specify output formats (html and screenshots)
-firecrawl scrape https://example.com --formats html,screenshot --mobile
+# Scrape and specify output format (html and screenshots)
+firecrawl scrape https://example.com --format html,screenshot --mobile
 
 # Perform structured JSON extraction from a web page
-firecrawl scrape https://example.com --json-prompt "Extract products" --json-schema '{"type":"object"}'
+firecrawl scrape https://example.com --format json --schema '{"type":"object","properties":{"title":{"type":"string"}}}'
 ```
 
 #### Scrape Flags
-- `--formats strings`: Formats to return (e.g. `markdown`, `html`, `rawHtml`, `screenshot`, `links`, `video`, `product`, `json`).
-- `--only-main-content`: Only return main content of the page, excluding headers/footers (default: `true`).
-- `--include-tags strings`: Comma-separated list of HTML tags to include.
-- `--exclude-tags strings`: Comma-separated list of HTML tags to exclude.
-- `--wait-for int`: Time in milliseconds to wait before scraping.
+- `--format strings`: Output formats (comma-separated): `markdown`, `html`, `rawHtml`, `links`, `screenshot`, `json`, `images`, `summary`, `changeTracking`, `attributes`, `branding` (default: `[markdown]`).
+- `--html`: Shortcut for `--format html`.
+- `--only-main-content`: Extract only main content of the page, excluding headers/footers (default: `true`).
+- `--include-tags strings`: HTML tags to include (comma-separated).
+- `--exclude-tags strings`: HTML tags to exclude (comma-separated).
+- `--wait-for int`: Wait time in milliseconds for JS rendering.
 - `--mobile`: Scrape with mobile user-agent.
 - `--skip-tls-verification`: Skip TLS certificate verification.
 - `--remove-base64-images`: Strip base64-encoded images from the output.
 - `--block-ads`: Block advertising scripts and elements.
-- `--proxy string`: Proxy server URL (e.g., `http://proxy.example.com:8080`).
+- `--proxy string`: Proxy mode for scraping (e.g., `auto` or `basic`).
 - `--max-age int`: Cache maximum age in seconds.
 - `--store-in-cache`: Store scraped content in the cache.
 - `--lockdown`: Enable strict lockdown browser sandbox mode.
@@ -82,7 +86,15 @@ firecrawl scrape https://example.com --json-prompt "Extract products" --json-sch
 - `--location-country string`: Geolocation targeting ISO country code (e.g., `US`, `DE`).
 - `--location-languages strings`: Geolocation targeting languages (e.g., `en`, `fr`).
 - `--json-prompt string`: Prompt for structured JSON extraction.
-- `--json-schema string`: Raw JSON schema string or path to a JSON schema file defining the extraction structure.
+- `--schema string`: JSON schema for structured extraction (inline JSON string).
+- `--schema-file string`: Path to a JSON schema file defining the extraction structure.
+- `--actions string`: JSON actions array to run during scrape (inline JSON).
+- `--actions-file string`: Path to a JSON actions file.
+- `--screenshot`: Take a screenshot of the page.
+- `--full-page-screenshot`: Take a full page screenshot.
+- `--output string`: Save output to file instead of printing.
+- `--pretty`: Pretty print JSON output.
+- `--timing`: Show request timing and duration information.
 
 ---
 
@@ -102,38 +114,45 @@ firecrawl map https://example.com --detailed --limit 50
 ```
 
 #### Map Flags
-- `--search string`: Filter mapped URLs using a search query.
-- `--sitemap string`: Explicit sitemap XML URL to use for link discovery.
+- `--limit int`: Maximum URLs to discover (default: `100`).
+- `--search string`: Filter discovered URLs by search query.
+- `--sitemap string`: Sitemap handling mode (`include`, `skip`, `only`) or custom sitemap XML URL.
 - `--include-subdomains`: Include subdomains in the mapped URLs.
-- `--ignore-query-parameters`: Strip query strings from discovered links.
-- `--limit int`: Maximum number of discovered links to return (default: `100`).
-- `--detailed`: Show additional metadata (title, description) for each discovered link.
-- `--location-country string`: Geolocation targeting country code.
-- `--location-languages strings`: Geolocation targeting languages.
+- `--ignore-query-parameters`: Treat URLs with different parameters as same.
+- `--wait`: Wait for map to complete.
+- `--timeout int`: Timeout in seconds for the operation.
+- `--detailed`: Show additional metadata (title, description) for discovered links.
+- `--output string`: Save output to file instead of printing.
+- `--pretty`: Pretty print JSON output.
 
 ---
 
 ### 3. `search`
 
-Searches the web and retrieves scraped results.
+Searches the web and optionally scrapes the results.
 
 ```bash
-# Search the web for a query and output scraped markdown results
+# Search the web for a query and output results
 firecrawl search "firecrawl scraper"
 
 # Limit search results and apply custom scraping rules to matched pages
-firecrawl search "best coffee" --limit 3 --scrape-formats markdown
+firecrawl search "best coffee" --limit 3 --scrape --scrape-formats markdown
 ```
 
 #### Search Flags
-- `--include-domains strings`: Restrict search results to specific domains.
-- `--exclude-domains strings`: Exclude specific domains from the search results.
-- `--limit int`: Maximum number of search results to retrieve (default: `5`).
+- `--limit int`: Maximum number of search results to retrieve (default: `5`, max: `100`).
+- `--sources strings`: Sources to search (comma-separated): `web`, `images`, `news`.
+- `--categories strings`: Filter by category (comma-separated): `github`, `research`, `pdf`.
 - `--tbs string`: Time-based search restriction (e.g. `qdr:d` for past day, `qdr:w` for past week).
-- `--location string`: Location targeting parameter for Google search (e.g. `United States`).
-- `--ignore-invalid-urls`: Skip scraping invalid URLs found in search results.
-- `--scrape-formats strings`: Formats for scraping matched search pages (default: `markdown`).
-- `--scrape-only-main-content`: Only return main content of matching pages during scrape (default: `true`).
+- `--location string`: Location targeting parameter for search (e.g. `Berlin,Germany`).
+- `--country string`: ISO country code for geotargeting (default: `US`).
+- `--timeout int`: Timeout in milliseconds (default: `60000`).
+- `--ignore-invalid-urls`: Exclude URLs invalid for other Firecrawl endpoints.
+- `--scrape`: Scrape search results.
+- `--scrape-formats strings`: Formats for scraped content (comma-separated) (default: `[markdown]`).
+- `--only-main-content`: Include only main content when scraping (default: `true`).
+- `--output string`: Save output to file instead of printing.
+- `--pretty`: Pretty print JSON output.
 
 ---
 
@@ -143,20 +162,31 @@ Runs an autonomous AI browser agent to crawl, discover, and extract structured d
 
 ```bash
 # Prompt the agent to explore and extract pricing plans
-firecrawl agent "Find all plans and prices" --urls https://example.com/pricing
+firecrawl agent "Find all plans and prices" --urls https://example.com/pricing --wait
 
-# Run the agent with a strict JSON schema file
-firecrawl agent "Extract features" --urls https://example.com --schema ./schema.json
+# Check status of an existing agent job using Job ID
+firecrawl agent 550e8400-e29b-41d4-a716-446655440000 --status
+
+# Cancel an active agent job using Job ID
+firecrawl agent 550e8400-e29b-41d4-a716-446655440000 --cancel
 ```
 
 Refer to [AGENTS.md](./AGENTS.md) for a comprehensive guide on prompting, constraints, and dynamic schema configuration.
 
 #### Agent Flags
-- `--urls strings`: Seed URLs for the agent to start crawling/extracting from.
-- `--schema string`: Raw JSON schema string or path to a JSON schema file defining the extracted structure.
+- `--urls strings`: Optional list of seed URLs to focus the agent on (comma-separated).
+- `--model string`: Model to use for the agent run (e.g., `spark-1-mini` or `spark-1-pro`).
+- `--schema string`: JSON schema for structured output (inline JSON string).
+- `--schema-file string`: Path to a JSON schema file defining the extracted structure.
 - `--max-credits int`: Maximum credit budget permitted for the agent run.
 - `--strict-constrain-to-urls`: Enforce strict agent navigation boundaries to seed URLs.
-- `--model string`: The model name to use for agent reasoning and execution.
+- `--webhook string`: Webhook URL or configuration JSON.
+- `--status`: Check status of an existing agent job.
+- `--cancel`: Cancel an active agent job.
+- `--wait`: Wait for agent to complete before returning results.
+- `--poll-interval int`: Polling interval in seconds when waiting (default: `5`).
+- `--timeout int`: Timeout in seconds when waiting.
+- `--output string`: Save output to file instead of printing.
 
 ---
 

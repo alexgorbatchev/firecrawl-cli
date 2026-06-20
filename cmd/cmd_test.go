@@ -14,10 +14,12 @@ import (
 
 // mockFirecrawlClient implements FirecrawlClient for testing.
 type mockFirecrawlClient struct {
-	scrapeFn func(ctx context.Context, url string, opts *firecrawl.ScrapeOptions) (*firecrawl.Document, error)
-	mapFn    func(ctx context.Context, url string, opts *firecrawl.MapOptions) (*firecrawl.MapData, error)
-	searchFn func(ctx context.Context, query string, opts *firecrawl.SearchOptions) (*firecrawl.SearchData, error)
-	agentFn  func(ctx context.Context, opts *firecrawl.AgentOptions) (*firecrawl.AgentStatusResponse, error)
+	scrapeFn    func(ctx context.Context, url string, opts *firecrawl.ScrapeOptions) (*firecrawl.Document, error)
+	mapFn       func(ctx context.Context, url string, opts *firecrawl.MapOptions) (*firecrawl.MapData, error)
+	searchFn    func(ctx context.Context, query string, opts *firecrawl.SearchOptions) (*firecrawl.SearchData, error)
+	agentFn     func(ctx context.Context, opts *firecrawl.AgentOptions) (*firecrawl.AgentStatusResponse, error)
+	getStatusFn func(ctx context.Context, jobID string) (*firecrawl.AgentStatusResponse, error)
+	cancelFn    func(ctx context.Context, jobID string) (map[string]interface{}, error)
 }
 
 func (m *mockFirecrawlClient) Scrape(ctx context.Context, url string, opts *firecrawl.ScrapeOptions) (*firecrawl.Document, error) {
@@ -48,6 +50,20 @@ func (m *mockFirecrawlClient) Agent(ctx context.Context, opts *firecrawl.AgentOp
 	return nil, errors.New("Agent not implemented in mock")
 }
 
+func (m *mockFirecrawlClient) GetAgentStatus(ctx context.Context, jobID string) (*firecrawl.AgentStatusResponse, error) {
+	if m.getStatusFn != nil {
+		return m.getStatusFn(ctx, jobID)
+	}
+	return nil, errors.New("GetAgentStatus not implemented in mock")
+}
+
+func (m *mockFirecrawlClient) CancelAgent(ctx context.Context, jobID string) (map[string]interface{}, error) {
+	if m.cancelFn != nil {
+		return m.cancelFn(ctx, jobID)
+	}
+	return nil, errors.New("CancelAgent not implemented in mock")
+}
+
 // resetFlags resets all persistent and local CLI flag variables to their default values.
 func resetFlags() {
 	// Global
@@ -57,7 +73,7 @@ func resetFlags() {
 	jsonOutput = false
 
 	// Scrape
-	scrapeFormats = []string{"markdown"}
+	scrapeFormat = []string{"markdown"}
 	scrapeOnlyMainContent = true
 	scrapeIncludeTags = nil
 	scrapeExcludeTags = nil
@@ -74,7 +90,7 @@ func resetFlags() {
 	scrapeLocationCountry = ""
 	scrapeLocationLanguages = nil
 	scrapeJsonPrompt = ""
-	scrapeJsonSchema = ""
+	scrapeSchema = ""
 
 	// Map
 	mapSearch = ""
@@ -87,12 +103,13 @@ func resetFlags() {
 	mapDetailed = false
 
 	// Search
-	searchIncludeDomains = nil
-	searchExcludeDomains = nil
+	searchSources = nil
+	searchCategories = nil
 	searchLimit = 5
 	searchTBS = ""
 	searchLocation = ""
 	searchIgnoreInvalidURLs = false
+	searchScrape = false
 	searchScrapeFormats = []string{"markdown"}
 	searchScrapeOnlyMainContent = true
 
@@ -153,7 +170,7 @@ func TestScrapeCommand(t *testing.T) {
 		},
 		{
 			name: "custom options mapping",
-			args: []string{"scrape", "https://example.com", "--formats", "html,screenshot", "--mobile", "--wait-for", "1000", "--only-main-content=false"},
+			args: []string{"scrape", "https://example.com", "--format", "html,screenshot", "--mobile", "--wait-for", "1000", "--only-main-content=false"},
 			mockScrape: func(ctx context.Context, url string, opts *firecrawl.ScrapeOptions) (*firecrawl.Document, error) {
 				if len(opts.Formats) != 2 || opts.Formats[0] != "html" || opts.Formats[1] != "screenshot" {
 					return nil, fmt.Errorf("unexpected formats: %v", opts.Formats)
@@ -171,7 +188,7 @@ func TestScrapeCommand(t *testing.T) {
 					HTML: "<h1>Scraped HTML</h1>",
 				}, nil
 			},
-			wantOutput: "<h1>Scraped HTML</h1>",
+			wantOutput: "Scraped HTML",
 		},
 		{
 			name: "scrape error propagation",
@@ -245,7 +262,7 @@ func TestMapCommand(t *testing.T) {
 		},
 		{
 			name: "json output format",
-			args: []string{"--json", "map", "https://example.com"},
+			args: []string{"--json", "map", "https://example.com", "--pretty"},
 			mockMap: func(ctx context.Context, url string, opts *firecrawl.MapOptions) (*firecrawl.MapData, error) {
 				return &firecrawl.MapData{
 					Links: []firecrawl.LinkResult{
@@ -313,7 +330,7 @@ func TestSearchCommand(t *testing.T) {
 		},
 		{
 			name: "search with customized scrape formats and limit",
-			args: []string{"search", "test", "--limit", "3", "--scrape-formats", "markdown,html"},
+			args: []string{"search", "test", "--limit", "3", "--scrape", "--scrape-formats", "markdown,html"},
 			mockSearch: func(ctx context.Context, query string, opts *firecrawl.SearchOptions) (*firecrawl.SearchData, error) {
 				if opts.Limit == nil || *opts.Limit != 3 {
 					return nil, errors.New("expected limit of 3")

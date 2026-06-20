@@ -16,6 +16,8 @@ type FirecrawlClient interface {
 	Map(ctx context.Context, url string, opts *firecrawl.MapOptions) (*firecrawl.MapData, error)
 	Search(ctx context.Context, query string, opts *firecrawl.SearchOptions) (*firecrawl.SearchData, error)
 	Agent(ctx context.Context, opts *firecrawl.AgentOptions) (*firecrawl.AgentStatusResponse, error)
+	GetAgentStatus(ctx context.Context, jobID string) (*firecrawl.AgentStatusResponse, error)
+	CancelAgent(ctx context.Context, jobID string) (map[string]interface{}, error)
 }
 
 // RealFirecrawlClient wraps the official SDK Client and implements FirecrawlClient.
@@ -65,4 +67,14 @@ func (r *RealFirecrawlClient) Search(ctx context.Context, query string, opts *fi
 // Agent delegates to the underlying SDK Client's auto-polling implementation.
 func (r *RealFirecrawlClient) Agent(ctx context.Context, opts *firecrawl.AgentOptions) (*firecrawl.AgentStatusResponse, error) {
 	return r.client.Agent(ctx, opts)
+}
+
+// GetAgentStatus delegates to the underlying SDK Client.
+func (r *RealFirecrawlClient) GetAgentStatus(ctx context.Context, jobID string) (*firecrawl.AgentStatusResponse, error) {
+	return r.client.GetAgentStatus(ctx, jobID)
+}
+
+// CancelAgent delegates to the underlying SDK Client.
+func (r *RealFirecrawlClient) CancelAgent(ctx context.Context, jobID string) (map[string]interface{}, error) {
+	return r.client.CancelAgent(ctx, jobID)
 }
