@@ -8,10 +8,10 @@
 
 ### Prebuilt Binaries (Recommended)
 
-To get started, download the latest prebuilt binary for your platform (Linux, macOS, or Windows) from the **GitHub Releases** page:
+To get started, download the latest prebuilt binary for your platform (Linux, macOS, or Windows) from the [GitHub Releases](https://github.com/alexgorbatchev/firecrawl-cli/releases) page:
 
-1. Navigate to the **Releases** tab in this GitHub repository.
-2. Download the archive appropriate for your OS and CPU architecture (e.g., `firecrawl_1.0.0_linux_amd64.tar.gz`).
+1. Navigate to the [Releases](https://github.com/alexgorbatchev/firecrawl-cli/releases) tab.
+2. Download the archive appropriate for your OS and CPU architecture (e.g., `firecrawl_0.0.1_linux_amd64.tar.gz`).
 3. Extract the downloaded archive.
 4. Move the `firecrawl` binary into a directory in your system's `PATH` (e.g., `/usr/local/bin` on macOS/Linux).
 
