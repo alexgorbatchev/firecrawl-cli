@@ -141,3 +141,69 @@ To get the most reliable extractions from the Firecrawl AI agent, keep the follo
 2. **Limit Traversal Scope:** Set `--strict-constrain-to-urls` if you do not want the agent to wander onto third-party blog links, docs subdomains, or partners' sites.
 3. **Use Explicit Schemas:** Standardize schemas using standard JSON types (`string`, `number`, `boolean`, `array`, `object`). Always declare `required` fields to force the agent to search harder for key data points.
 4. **Constrain Credit Budgets:** High-depth agent actions can be expensive. Always use `--max-credits` to set sanity boundaries for exploratory prompt runs.
+
+---
+
+## 5. Release Process (AI Agents Only)
+
+If you are an AI coding agent (e.g., Claude Code, OpenCode) tasked with releasing a new version of this CLI, you must strictly follow this protocol.
+
+### ⚠️ CRITICAL RULE
+**Releases and version tagging must ONLY be done at the explicit request of the User. Never proactively increment versions, create tags, or push releases.**
+
+### Step-by-Step Release Protocol
+
+Once explicitly requested by the user, follow these exact steps to execute and verify the release:
+
+#### 1. Code Quality Verification
+Before tagging, you must ensure all code is properly formatted, statically analyzed, and all unit tests pass:
+```bash
+just check
+```
+Do not proceed if any check fails or if there is module formatting drift (resolved by running `go mod tidy`).
+
+#### 2. Check Tag History
+Verify existing tags in the repository to ensure your new version increment is correct:
+```bash
+# Check local tags
+git tag -l
+
+# Check remote tags
+git ls-remote --tags origin
+```
+
+#### 3. Create Annotated Tag
+Create a new annotated Git tag locally using standard Semantic Versioning (e.g., `v0.0.3`):
+```bash
+git tag -a v0.0.3 -m "Release v0.0.3"
+```
+*Note: Always use annotated tags (`-a`) rather than lightweight tags, as GoReleaser uses the annotation message to generate changelogs.*
+
+#### 4. Push Tag to GitHub
+Push the newly created version tag to the remote repository. This triggers the automated GoReleaser pipeline in GitHub Actions:
+```bash
+git push origin v0.0.3
+```
+
+#### 5. Monitor Release Pipeline
+Retrieve and watch the active GitHub Actions run to verify the release pipeline compiles and publishes correctly:
+```bash
+# List runs to find the latest Run ID
+gh run list
+
+# Watch the specific run until completion
+gh run watch <RUN_ID>
+```
+
+#### 6. Verify Published Assets
+Once the pipeline succeeds, download and test the compiled binary for your platform from the releases page to verify its integrity:
+```bash
+# Download the Linux or macOS archive
+gh release download v0.0.3 --pattern "firecrawl_0.0.3_linux_amd64.tar.gz" --dir /tmp
+
+# Extract and test execution
+tar -zxvf /tmp/firecrawl_0.0.3_linux_amd64.tar.gz -C /tmp
+/tmp/firecrawl --help
+```
+Ensure that no errors are thrown, and clean up temporary assets upon completion.
+

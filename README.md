@@ -238,32 +238,4 @@ just fmt
 
 ---
 
-## Release Process
-
-The `firecrawl` release cycle is completely automated using **GoReleaser** and GitHub Actions.
-
-### 1. Verification
-Before releasing, run all local unit tests and checks:
-```bash
-just check
-```
-
-### 2. Creating a Tag
-Always use an annotated Git tag (`git tag -a`) to supply the release notes correctly:
-```bash
-git tag -a v1.0.0 -m "Release v1.0.0"
-```
-
-### 3. Pushing the Tag
-Pushing the tag to GitHub triggers the release pipeline:
-```bash
-git push origin v1.0.0
-```
-
-The GitHub Action automatically runs verification checks, launches GoReleaser, generates prebuilt archives and a `checksums.txt` file for all targeted platforms (Darwin, Linux, Windows), and publishes them to the GitHub Releases tab of this repository.
-
----
-
-## License
-
 This project is licensed under the [MIT License](./LICENSE).
