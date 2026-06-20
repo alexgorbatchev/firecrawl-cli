@@ -23,7 +23,7 @@ archives:
     files:
       - LICENSE*
       - README*
-      - agents*
+      - AGENTS*
 
 checksum:
   name_template: checksums.txt
