@@ -17,10 +17,15 @@ To get started, download the latest prebuilt binary for your platform (Linux, ma
 3. Extract the downloaded archive.
 4. Move the `firecrawl` binary into a directory in your system's `PATH` (e.g., `/usr/local/bin` on macOS/Linux).
 
-Once installed, verify that it works by running:
+Once installed, verify that it works by configuring your credentials and executing a basic scrape request targeting an imaginary internal self-hosted Firecrawl instance:
 
 ```bash
-firecrawl --help
+# Configure your API key and self-hosted API base URL
+export FIRECRAWL_API_KEY="your-api-key"
+export FIRECRAWL_API_URL="https://firecrawl.internal.co"
+
+# Scrape a page using the direct URL positional shortcut
+firecrawl https://example.com
 ```
 
 ---
