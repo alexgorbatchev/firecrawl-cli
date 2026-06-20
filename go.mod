@@ -1,4 +1,4 @@
-module firecrawl
+module github.com/alexgorbatchev/firecrawl-cli
 
 go 1.26.2
 
